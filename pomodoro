@@ -6,8 +6,10 @@ from sigtools import modifiers
 import sys
 import time
 import subprocess
+from datetime import timedelta
 from datetime import datetime
 import os
+import sys
 
 try:
     from PyQt5.QtWidgets import QMessageBox
@@ -17,45 +19,42 @@ except ImportError:
 else:
     has_qt = True
 
-
 display = print
 this_dir = os.path.dirname(__file__)
-ALARM = "{}/../../clock.mp3".format(this_dir)
+ALARM = "{}/clock.mp3".format(this_dir)
 DATA_FILENAME = os.path.expanduser("~/.pomodoro")
 DEV_NULL = open(os.devnull, "w")
 
 
 def notify(title, content, more=''):
-    if not has_qt:
-        return
-    app = QApplication(sys.argv)
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Information)
-    msg.setText(content)
-    msg.setWindowTitle(title)
-    msg.setDetailedText(more)
-    msg.show()
-    app.exec_()
+    os.system("""osascript -e 'display notification "{}" with title \
+              "{}"'""".format(content, title))
+    #if not has_qt:
+    #    return
+    #app = QApplication(sys.argv)
+    #msg = QMessageBox()
+    #msg.setIcon(QMessageBox.Information)
+    #msg.setText(content)
+    #msg.setWindowTitle(title)
+    #msg.setDetailedText(more)
+    #msg.show()
+    #app.exec_()
 
 
 def tick(duration):
     try:
-        time.sleep(duration)
+        update_interval = 10
+        for s in range(int(duration / update_interval)):
+            td = timedelta(seconds = duration - s*update_interval)
+            sys.stdout.write("Remaining : %s \r" % td)
+            sys.stdout.flush()
+            time.sleep(update_interval)
     except KeyboardInterrupt:
         display("Interrupting")
         interrupt = True
     else:
         interrupt = False
     return interrupt
-
-
-def play_alarm(filename):
-    cmd = ["mpg123", filename]
-    try:
-        p = subprocess.Popen(cmd, stdout=DEV_NULL, stderr=subprocess.PIPE)
-        p.wait()
-    except FileNotFoundError:
-        pass
 
 
 def write_pomo(start, stop, tag):
@@ -70,8 +69,8 @@ def write_pomo(start, stop, tag):
     fd.close()
 
 
-@modifiers.kwoargs('repeat', 'alarm', 'notif')
-def main(work=60, rest=5, repeat=10, alarm=True, notif=False):
+@modifiers.kwoargs('repeat')
+def main(work=60, rest=5, repeat=10):
     """
     work : int
         nb of minuntes of work
@@ -81,13 +80,6 @@ def main(work=60, rest=5, repeat=10, alarm=True, notif=False):
 
     repeat : int
         nb of cycles work-rest to do
-
-    alarm : bool
-        whether to play an alarm each time a pomodoro is finished or started
-
-    notif : bool
-        whether to send a message box each time a pomodoro is finished or
-        started
     """
     for _ in range(repeat):
         display("Work now")
@@ -97,10 +89,7 @@ def main(work=60, rest=5, repeat=10, alarm=True, notif=False):
             break
         stop = datetime.now()
         write_pomo(start, stop, "work")
-        if alarm:
-            play_alarm(ALARM)
-        if notif:
-            notify('pomodoro', 'Finished pomo, rest now.')
+        notify('pomodoro', 'take a break.')
         display("Rest now")
         start = datetime.now()
         interrupted = tick(int(rest) * 60)
@@ -109,10 +98,7 @@ def main(work=60, rest=5, repeat=10, alarm=True, notif=False):
         stop = datetime.now()
         write_pomo(start, stop, "rest")
 
-        if alarm:
-            play_alarm(ALARM)
-        if notif:
-            notify('pomodoro', 'Finished rest, work now.')
+        notify('pomodoro', 'get back to work.')
         display("Cycle complete")
 
 
